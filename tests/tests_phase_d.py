@@ -1,8 +1,7 @@
 """Phase D tests (A6-A10) for capitalmarket.capitalselector.
 
 Run as:
-- python -m capitalmarket.capitalselector.tests_phase_d
-- python capitalmarket/capitalselector/tests_phase_d.py
+- pytest -q
 """
 
 from __future__ import annotations
@@ -12,21 +11,22 @@ from dataclasses import dataclass
 from typing import Dict, Tuple, Optional, List
 import numpy as np
 
-if __package__ is None or __package__ == "":
-    import os, sys
-    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
-    from capitalmarket.capitalselector.builder import CapitalSelectorBuilder  # type: ignore
-    from capitalmarket.capitalselector.broker import Broker, BrokerConfig  # type: ignore
-    from capitalmarket.capitalselector.channels import GaussianExplorer, TailRiskExplorer, DeterministicExplorer  # type: ignore
-    from capitalmarket.capitalselector.repair import (
-        RepairContext, RepairPolicySet, CapsPolicy, LagPolicy, SoftBailoutPolicy, IsolationPolicy
-    )  # type: ignore
-else:
-    from .builder import CapitalSelectorBuilder
-    from .broker import Broker, BrokerConfig
-    from .channels import GaussianExplorer, TailRiskExplorer, DeterministicExplorer
-    from .repair import RepairContext, RepairPolicySet, CapsPolicy, LagPolicy, SoftBailoutPolicy, IsolationPolicy
-    from .telemetry import TelemetryLogger
+from capitalmarket.capitalselector.builder import CapitalSelectorBuilder
+from capitalmarket.capitalselector.broker import Broker, BrokerConfig
+from capitalmarket.capitalselector.channels import (
+    GaussianExplorer,
+    TailRiskExplorer,
+    DeterministicExplorer,
+)
+from capitalmarket.capitalselector.repair import (
+    RepairContext,
+    RepairPolicySet,
+    CapsPolicy,
+    LagPolicy,
+    SoftBailoutPolicy,
+    IsolationPolicy,
+)
+from capitalmarket.capitalselector.telemetry import TelemetryLogger
 
 
 @dataclass

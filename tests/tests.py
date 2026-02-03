@@ -1,22 +1,11 @@
 """Lightweight smoke test for CapitalSelector.
 
-Supports execution as:
-- python -m capitalmarket.capitalselector.tests
-- python c:/ai/dl/economy/capitalmarket/capitalselector/tests.py
+Supports execution as pytest import or script.
 """
 
-if __package__ is None or __package__ == "":
-    # Running as a script: add economy/ to sys.path so we can import the package
-    import os, sys
-    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
-    from capitalmarket.capitalselector.builder import CapitalSelectorBuilder  # type: ignore
-    from capitalmarket.capitalselector.rebirth import SwitchTypePolicy  # type: ignore
-    import numpy as np  # type: ignore
-else:
-    # Running as a module inside the package
-    from .builder import CapitalSelectorBuilder
-    from .rebirth import SwitchTypePolicy
-    import numpy as np
+from capitalmarket.capitalselector.builder import CapitalSelectorBuilder
+from capitalmarket.capitalselector.rebirth import SwitchTypePolicy
+import numpy as np
 
 
 def main():

@@ -2,24 +2,19 @@
 """Phase C tests (A1-A5) for capitalmarket.capitalselector.
 
 Run as:
-- python -m capitalmarket.capitalselector.tests_phase_c
-- python capitalmarket/capitalselector/tests_phase_c.py
+- pytest -q
 """
 
 import unittest
 
-if __package__ is None or __package__ == "":
-    import os, sys
-    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
-    from capitalmarket.capitalselector.builder import CapitalSelectorBuilder  # type: ignore
-    from capitalmarket.capitalselector.broker import Broker, BrokerConfig  # type: ignore
-    from capitalmarket.capitalselector.channels import GaussianExplorer, TailRiskExplorer, DeterministicExplorer  # type: ignore
-    from capitalmarket.capitalselector.stack import StackManager, StackConfig  # type: ignore
-else:
-    from .builder import CapitalSelectorBuilder
-    from .broker import Broker, BrokerConfig
-    from .channels import GaussianExplorer, TailRiskExplorer, DeterministicExplorer
-    from .stack import StackManager, StackConfig
+from capitalmarket.capitalselector.builder import CapitalSelectorBuilder
+from capitalmarket.capitalselector.broker import Broker, BrokerConfig
+from capitalmarket.capitalselector.channels import (
+    GaussianExplorer,
+    TailRiskExplorer,
+    DeterministicExplorer,
+)
+from capitalmarket.capitalselector.stack import StackManager, StackConfig
 
 
 def run_loop(channels: dict, selector, broker: Broker, steps: int, stack_mgr: StackManager | None = None):
