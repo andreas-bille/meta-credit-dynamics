@@ -23,7 +23,8 @@ The project is intentionally:
 ## Status
 
 Phase D (Repair & Stabilization) is complete as of **v0.3.1**.
-Phase E (technical completion and feedback coupling) is planned.
+Phase E (Sedimented Mediation Paths) is complete as of **v0.4.0**.
+Phase F (Production Readiness) is planned.
 
 ## License
 
