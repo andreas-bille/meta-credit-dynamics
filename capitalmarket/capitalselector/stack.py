@@ -5,8 +5,12 @@ from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional, Iterable
 import math
 import numpy as np
+import uuid
+from pathlib import Path
 
 from .broker import PhaseCChannel, LegacyChannelAdapter, Broker, BrokerConfig
+from .sediment import SedimentDAG
+from .telemetry import TelemetryLogger
 
 
 @dataclass
@@ -127,31 +131,80 @@ class StackFormationThresholds:
     max_size: int = 5
 
 
+
 class StackManager:
     """Forms and dissolves stacks based on broker metrics.
 
-    v0: forms diversification-style stacks (low correlation) for stability.
+    Phase C: forms diversification-style stacks (low correlation) for stability.
+
+    Phase E v0 additions:
+    - optional SedimentDAG hard-filter for formation attempts
+    - on dissolution, persist failed configuration as sediment (node + chain edge)
+    - optional telemetry events for Phase E invariants
     """
 
-    def __init__(self, stack_cfg: Optional[StackConfig] = None, thresholds: Optional[StackFormationThresholds] = None):
+    def __init__(
+        self,
+        stack_cfg: Optional[StackConfig] = None,
+        thresholds: Optional[StackFormationThresholds] = None,
+        *,
+        sediment: Optional["SedimentDAG"] = None,
+        telemetry: Optional["TelemetryLogger"] = None,
+        world_id: str = "",
+        phase_id: str = "E1",
+        run_id: Optional[str] = None,
+    ):
         self.stack_cfg = stack_cfg or StackConfig()
         self.thresholds = thresholds or StackFormationThresholds(
-            tau_mu=0.0, tau_vol=1.0e9, tau_cvar=-1.0e9, tau_surv=0.6, tau_corr=0.3,
-            min_size=self.stack_cfg.min_size, max_size=self.stack_cfg.max_size
+            tau_mu=0.0,
+            tau_vol=1.0e9,
+            tau_cvar=-1.0e9,
+            tau_surv=0.6,
+            tau_corr=0.3,
+            min_size=self.stack_cfg.min_size,
+            max_size=self.stack_cfg.max_size,
         )
         self.stacks: Dict[str, StackChannel] = {}
         self._counter = 0
+
+        self.sediment = sediment
+        self.telemetry = telemetry
+
+        self.world_id = str(world_id)
+        self.phase_id = str(phase_id)
+        self.run_id = str(run_id) if run_id is not None else str(uuid.uuid4())
+
+        self._t_counter = 0
+        # ensure we emit at most one rejection per time step to avoid flooding
+        self._last_reject_t: int = -1
+
+    def set_context(self, *, world_id: Optional[str] = None, phase_id: Optional[str] = None, run_id: Optional[str] = None):
+        if world_id is not None:
+            self.world_id = str(world_id)
+        if phase_id is not None:
+            self.phase_id = str(phase_id)
+        if run_id is not None:
+            self.run_id = str(run_id)
 
     def _next_id(self) -> str:
         self._counter += 1
         return f"stack_{self._counter}"
 
+    @staticmethod
+    def _fingerprint_members(members: Iterable[str]) -> List[str]:
+        return sorted([str(x) for x in members])
+
+    def _emit(self, t: int, event_type: str, subject_id: str, **attrs):
+        if self.telemetry is not None:
+            self.telemetry.log(t=t, event_type=event_type, subject_id=str(subject_id), **attrs)
+
     def try_form_stack(self, broker: Broker, channels: Dict[str, PhaseCChannel]) -> Optional[str]:
         """Form one stack if possible. Returns new stack_id or None."""
         th = self.thresholds
         ids = list(channels.keys())
+
         # Candidate filter by per-explorer metrics
-        cand = []
+        cand: List[str] = []
         snap = broker.metric_snapshot()
         for eid in ids:
             m = snap.get(eid)
@@ -172,20 +225,48 @@ class StackManager:
         if len(cand) < th.min_size:
             return None
 
-        # Build low-correlation subset greedily
-        chosen: List[str] = []
-        for eid in cand:
-            if len(chosen) == 0:
-                chosen.append(eid); continue
-            ok = True
-            for other in chosen:
-                if abs(broker.rho(eid, other)) > th.tau_corr:
-                    ok = False
+        # Build low-correlation subsets greedily, with sediment-aware retries (v0)
+        def build_subset(seed: str) -> List[str]:
+            chosen: List[str] = []
+            for eid in [seed] + [x for x in cand if x != seed]:
+                if len(chosen) == 0:
+                    chosen.append(eid)
+                    continue
+                ok = True
+                for other in chosen:
+                    if abs(broker.rho(eid, other)) > th.tau_corr:
+                        ok = False
+                        break
+                if ok:
+                    chosen.append(eid)
+                if len(chosen) >= th.max_size:
                     break
-            if ok:
-                chosen.append(eid)
-            if len(chosen) >= th.max_size:
-                break
+            return chosen
+
+        # try different seeds until we find a non-forbidden candidate (or give up)
+        chosen: List[str] = []
+        for seed in cand:
+            trial = build_subset(seed)
+            if len(trial) < th.min_size:
+                continue
+            if self.sediment is not None:
+                members_fp = self._fingerprint_members(trial)
+                if self.sediment.is_forbidden(candidate_members=members_fp, phase_id=self.phase_id):
+                    # emit at most one rejection per time step to stabilize late-phase counts
+                    if self._last_reject_t != self._t_counter:
+                        self._emit(
+                            self._t_counter,
+                            "SEDIMENT_FORMATION_REJECTED",
+                            "stack_candidate",
+                            members=members_fp,
+                            phase_id=self.phase_id,
+                            world_id=self.world_id,
+                            run_id=self.run_id,
+                        )
+                        self._last_reject_t = self._t_counter
+                    continue
+            chosen = trial
+            break
 
         if len(chosen) < th.min_size:
             return None
@@ -194,24 +275,60 @@ class StackManager:
         members = {eid: channels[eid] for eid in chosen}
         for eid in chosen:
             del channels[eid]
+
         sid = self._next_id()
         stack = StackChannel(members, cfg=self.stack_cfg, stack_id=sid)
         self.stacks[sid] = stack
         channels[sid] = stack
+
         return sid
 
     def maintain(self, channels: Dict[str, PhaseCChannel]):
-        """Remove dead/unstable stacks."""
-        to_remove = []
-        for sid, st in self.stacks.items():
+        """Remove dead/unstable stacks.
+
+        Phase E: on dissolution, emit STACK_DISSOLVED and write Sediment node.
+        """
+        self._t_counter += 1
+        t = self._t_counter
+
+        to_remove: List[str] = []
+        for sid, st in list(self.stacks.items()):
             if sid not in channels:
                 to_remove.append(sid)
                 continue
+
             if not st.stable():
+                members_fp = self._fingerprint_members(st.members.keys())
+                mask = {"masked_members": members_fp, "mask_depth": 1}
+
+                # Telemetry: dissolution
+                self._emit(
+                    t,
+                    "STACK_DISSOLVED",
+                    sid,
+                    members=members_fp,
+                    mask=mask,
+                    phase_id=self.phase_id,
+                    world_id=self.world_id,
+                    run_id=self.run_id,
+                )
+
+                # Sediment insertion
+                if self.sediment is not None:
+                    self.sediment.add_node(
+                        members=members_fp,
+                        mask=mask,
+                        world_id=self.world_id,
+                        phase_id=self.phase_id,
+                        t=t,
+                        run_id=self.run_id,
+                    )
+
                 # dissolve: re-expose members if still alive
                 for eid, ch in st.members.items():
                     channels[eid] = ch
                 del channels[sid]
                 to_remove.append(sid)
+
         for sid in to_remove:
             self.stacks.pop(sid, None)

@@ -1,11 +1,12 @@
 from .core import CapitalSelector, Channel
 from .builder import CapitalSelectorBuilder
-from .rebirth import RebirthPolicy, SwitchTypePolicy
+from .rebirth import RebirthPolicy, SwitchTypePolicy, SedimentAwareRebirthPolicy
 from .reweight import exp_reweight, simplex_normalize
 from .stats import EWMAStats
 from .channels import DummyChannel, GaussianExplorer, TailRiskExplorer, DeterministicExplorer
 from .broker import Broker, BrokerConfig, CreditPolicy, PhaseCChannel, LegacyChannelAdapter
 from .stack import StackChannel, StackManager, StackConfig, StackFormationThresholds
+from .sediment import SedimentDAG, SedimentNode
 
 __all__ = [
     "CapitalSelector",
@@ -13,6 +14,7 @@ __all__ = [
     "CapitalSelectorBuilder",
     "RebirthPolicy",
     "SwitchTypePolicy",
+    "SedimentAwareRebirthPolicy",
     "exp_reweight",
     "simplex_normalize",
     "EWMAStats",
@@ -27,6 +29,8 @@ __all__ = [
     "StackFormationThresholds",
     "StackChannel",
     "StackManager",
+    "SedimentDAG",
+    "SedimentNode",
     "GaussianExplorer",
     "TailRiskExplorer",
     "DeterministicExplorer",

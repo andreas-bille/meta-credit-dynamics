@@ -159,20 +159,20 @@ Richtwerte: N≈50–200, M≈500–2000 je nach Welt/Noise.
 
 ## 9. Mapping auf vorhandenen Code
 
-- CapitalSelector: economy/capitalmarket/capitalselector/core.py
+- CapitalSelector: capitalmarket/capitalselector/core.py
   - nutzt EWMAStats, reweight_fn; feedback_vector(r_vec, c) bereits vorhanden
-- Reweighting: economy/capitalmarket/capitalselector/reweight.py
-- Rebirth: economy/capitalmarket/capitalselector/rebirth.py
+- Reweighting: capitalmarket/capitalselector/reweight.py
+- Rebirth: capitalmarket/capitalselector/rebirth.py
 
 Erweiterungen v0:
-- Neuer Broker-Typ: economy/capitalmarket/capitalselector/broker.py
+- Neuer Broker-Typ: capitalmarket/capitalselector/broker.py
   - hält Metriken je Explorer (mu, var, cvar, dd, rho, dt, surv)
   - implementiert observe/decide_limits/allocate
-- Stack-Entität: economy/capitalmarket/capitalselector/stack.py
+- Stack-Entität: capitalmarket/capitalselector/stack.py
   - kapselt Explorer, exportiert Channel, berechnet C_agg
-- Explorer-Adapter-Beispiele: economy/capitalmarket/capitalselector/channels.py
+- Explorer-Adapter-Beispiele: capitalmarket/capitalselector/channels.py
   - synthetische Channels mit konfigurierbarer Varianz/Delay/Tail
-- Tests: economy/capitalmarket/capitalselector/tests_phase_c.py inkl. A1–A5
+- Tests: tests/tests_phase_c.py inkl. A1–A5
 
 ---
 
