@@ -1,22 +1,8 @@
-# GPU / research environment (optional)
-# pip install -r requirements-dev.txt --extra-index-url https://download.pytorch.org/whl/cu130
+--extra-index-url https://download.pytorch.org/whl/cu130
 
+-r requirements.txt
+
+# Minimal CUDA-enabled PyTorch stack
 torch==2.9.1+cu130
 torchvision==0.24.1+cu130
 torchaudio==2.9.1+cu130
-
-transformers==4.57.5
-datasets==4.4.2
-accelerate==1.12.0
-evaluate==0.4.6
-peft==0.18.1
-bitsandbytes==0.49.1
-sentencepiece==0.2.1
-safetensors==0.7.0
-
-seaborn
-scikit-learn
-sympy
-pyarrow
-PyYAML
-regex

@@ -7,7 +7,11 @@ def simplex_normalize(w: np.ndarray) -> np.ndarray:
         return np.ones_like(w) / len(w)
     return w / s
 
-def exp_reweight(w: np.ndarray, advantage: float, eta: float) -> np.ndarray:
+def exp_reweight(w: np.ndarray, score: np.ndarray, eta: float) -> np.ndarray:
+    """Exponentiated gradient update on simplex.
+
+    score is a per-channel vector. If a scalar is provided, it is broadcast.
+    """
     g = np.zeros_like(w)
-    g[:] = advantage
+    g[:] = score
     return simplex_normalize(w * np.exp(eta * g))

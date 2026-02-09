@@ -24,6 +24,10 @@ class SedimentDAG:
     - nodes inserted on Stack dissolution
     - edges encode temporal order (chain per run_id)
     - filter is hard (is_forbidden)
+
+    Canonical (v1):
+    - Sediment is non-causal for weights/stats/wealth.
+    - Its only effect is structural exclusion during stack formation.
     """
 
     def __init__(self, persist_path: Optional[Path] = None, *, forbid_pairs: bool = False, truncate: bool = False):

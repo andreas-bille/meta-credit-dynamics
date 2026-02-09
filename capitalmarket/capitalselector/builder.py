@@ -45,7 +45,7 @@ class CapitalSelectorBuilder:
         return self
 
     def build(self) -> CapitalSelector:
-        stats = EWMAStats(beta=self._beta)
+        stats = EWMAStats(beta=self._beta, seed_var=1.0)
 
         def reweight(w, adv):
             return exp_reweight(w, adv, self._eta)

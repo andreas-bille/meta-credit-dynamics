@@ -18,12 +18,14 @@ class StackConfig:
     C_agg: float = 0.01
     min_size: int = 2
     max_size: int = 5
+    stack_weighting: str = "equal"
 
     # stability thresholds (v0)
     tau_mu: float = 0.0
     tau_vol: float = 1.0e9  # disable by default
     tau_cvar: float = -1.0e9
     tau_dd: float = 1.0e9
+    use_cvar: bool = False
 
 
 class StackChannel(PhaseCChannel):
@@ -35,6 +37,9 @@ class StackChannel(PhaseCChannel):
         self.members: Dict[str, PhaseCChannel] = dict(members)
         self.cfg = cfg or StackConfig()
         self.stack_id = stack_id
+
+        if self.cfg.stack_weighting != "equal":
+            raise ValueError(f"Unsupported stack_weighting: {self.cfg.stack_weighting}")
 
         # equal internal allocation
         self._w_internal: Dict[str, float] = {k: 1.0 / len(self.members) for k in self.members.keys()}
@@ -111,11 +116,12 @@ class StackChannel(PhaseCChannel):
 
     def stable(self) -> bool:
         s = self.state()
+        cvar_ok = True if not self.cfg.use_cvar else (s["cvar"] >= self.cfg.tau_cvar)
         return (
             s["alive"] > 0.5
             and s["mu"] >= self.cfg.tau_mu
             and s["vol"] <= self.cfg.tau_vol
-            and s["cvar"] >= self.cfg.tau_cvar
+            and cvar_ok
             and s["dd"] <= self.cfg.tau_dd
         )
 

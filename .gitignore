@@ -1,34 +1,16 @@
-# --- Python ---
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-*$py.class
-
-# Virtual environments
 .venv/
-venv/
-env/
-
-# --- Jupyter ---
-.ipynb_checkpoints/
-
-# --- OS ---
+economy/capitalmarket/__pycache__/__init__.cpython-314.pyc
+# Editor / OS noise
 .DS_Store
-Thumbs.db
-
-# --- Editors ---
 .vscode/
 .idea/
+.ipynb_checkpoints/
+__pycache__/
+*.py[cod]
+*$py.class
 
-# --- Test / Coverage ---
-.pytest_cache/
-.coverage
-htmlcov/
-
-# --- Local runs (keep curated examples only) ---
-logs/*
-plots/*
-
-!logs/.keep
-!plots/.keep
+# Experiment artifacts (public repo)
+logs/
+plots/
+notebooks/
+sandbox/

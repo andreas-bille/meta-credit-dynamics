@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 from .stats import EWMAStats
 from .rebirth import RebirthPolicy
+from .reweight import simplex_normalize
 
 from abc import ABC, abstractmethod
 from typing import Tuple
@@ -91,24 +92,67 @@ class CapitalSelector(Channel):
         self._last_r = r
         self._last_c = c
         self.wealth += r - c
-        self.stats.update(r)
+        self.stats.update(r - c)
         if self.wealth < self.rebirth_threshold:
             self.rebirth()
 
-    def feedback_vector(self, r_vec: np.ndarray, c: float):
+    def feedback_vector(self, r_vec: np.ndarray, c: float, trace: list[str] | None = None, freeze: bool = False):
         r_total = r_vec.sum()
+
+        if freeze:
+            if trace is not None:
+                trace.append("freeze")
+            self._enforce_invariants()
+            if trace is not None:
+                trace.append("invariants")
+            return
 
         self._last_r = r_total
         self._last_c = c
         self.wealth += r_total - c
 
-        self.stats.update(r_total)
+        if trace is not None:
+            trace.append("compute_pi")
+        _, _, pi_total, pi_vec = self.compute_pi(r_vec, c)
+        self.stats.update(pi_total)
+        if trace is not None:
+            trace.append("update_stats")
 
-        adv = r_vec - self.stats.mu   # ⚠️ jetzt Vektor!
+        adv = pi_vec - self.stats.mu   # ⚠️ jetzt Vektor!
         self.w = self.reweight_fn(self.w, adv)
+        if trace is not None:
+            trace.append("reweight")
 
         if self.wealth < self.rebirth_threshold:
             self.rebirth()
+            if trace is not None:
+                trace.append("rebirth")
+
+        self._enforce_invariants()
+        if trace is not None:
+            trace.append("invariants")
+
+    def compute_pi(self, r_vec: np.ndarray, c_total: float):
+        """Compute canonical net-flow aggregates.
+
+        Returns (R, C, Pi, pi_vec) with Pi = R - C and
+        pi_vec_k = r_vec_k - w_k * C_total (Profile A).
+        Assumes weights sum to 1.
+        """
+        r_vec = np.asarray(r_vec, dtype=float)
+        R = float(r_vec.sum())
+        C = float(c_total)
+        Pi = R - C
+        if self.w is None:
+            pi_vec = r_vec.copy()
+        else:
+            pi_vec = r_vec - self.w * C
+        return R, C, Pi, pi_vec
+
+    def _enforce_invariants(self):
+        """Ensure weight simplex constraints after updates."""
+        if self.w is not None:
+            self.w = simplex_normalize(self.w)
 
     # ---------- Rebirth ----------
 
@@ -119,6 +163,7 @@ class CapitalSelector(Channel):
         self.wealth = max(self.wealth, self.rebirth_threshold)
         if self.w is not None:
             self.w = np.ones(self.K) / self.K
+        self.stats.reset()
 
     # ---------- Introspection ----------
 
@@ -128,5 +173,8 @@ class CapitalSelector(Channel):
             "kind": self.kind,
             "mu": self.stats.mu,
             "var": self.stats.var,
+            "dd": self.stats.dd,
+            "cum_pi": self.stats.cum_pi,
+            "peak_cum_pi": self.stats.peak_cum_pi,
             "weights": None if self.w is None else self.w.copy(),
         }
