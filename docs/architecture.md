@@ -231,6 +231,10 @@ Its sole effect is a structural exclusion during stack formation.
 
 For the full external interface specification, see `interface.md`.
 
+Empirical runs are defined **outside** the kernel:
+World/Curriculum define experiments and must remain state-agnostic.
+They may not receive internal state or provide control signals.
+
 ### 8.1 World
 
 The **World** defines:
@@ -319,6 +323,11 @@ Instead, it defines **internally consistent profiles**:
   - Optional, non-canonical
 
 Implementations must support **Profile A** fully.
+
+**Builder boundary (profile isolation):**
+Profile selection occurs **only at instantiation** (builder time).
+The canonical kernel remains profile-agnostic and must not contain
+profile-conditional branches.
 
 ---
 

@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any, Dict
+import os
 import numpy as np
+import torch
 
 from .config import ProfileAConfig
 from .interfaces import World, Curriculum, Teacher, validate_world_output
 from .builder import CapitalSelectorBuilder
+from .cpu_impl import CpuCore
+from .cuda_impl import CudaCore
 
 
 @dataclass(frozen=True)
@@ -32,6 +36,8 @@ def run(
         raise ValueError("Only Profile A is supported in v1")
 
     prof = profile or ProfileAConfig()
+    device = torch.device(os.environ.get("CAPM_DEVICE", "cpu"))
+    core = CudaCore() if device.type == "cuda" else CpuCore()
 
     # initialize selector from Profile A defaults
     selector = CapitalSelectorBuilder().with_K(0).build()
@@ -44,7 +50,7 @@ def run(
         if selector.w is None or len(selector.w) != len(r_vec):
             selector.w = np.ones(len(r_vec)) / max(1, len(r_vec))
             selector.K = len(r_vec)
-        selector.feedback_vector(r_vec, c_total, trace=None, freeze=cfg.freeze)
+        core.step(selector, r_vec, c_total, freeze=cfg.freeze)
         history.append(selector.state())
         trace.append("step")
 

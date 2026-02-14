@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 @dataclass
 class EWMAStats:
+    # G2 inventory: see docs/phase_g_g2_state_inventory.md
     beta: float
     mu: float = 0.0
     var: float = 1.0

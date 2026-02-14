@@ -3,6 +3,7 @@ from .channels import DummyChannel
 from .stats import EWMAStats
 from .rebirth import RebirthPolicy
 from .reweight import exp_reweight
+from .config import ProfileAConfig, ProfileBConfig
 
 
 class CapitalSelectorBuilder:
@@ -14,6 +15,24 @@ class CapitalSelectorBuilder:
         self._kind = "entrepreneur"
         self._rebirth_policy = None
         self._channels: list[Channel] = []
+        self._resolved_config: dict[str, object] = {}
+
+    @classmethod
+    def from_profile(cls, profile: ProfileAConfig | ProfileBConfig):
+        profile.validate_closed()
+        builder = cls()
+        builder._resolved_config = {
+            "dt": profile.dt,
+            "cost_distribution": profile.cost_distribution,
+            "score_mode": profile.score_mode,
+            "stats_signal": profile.stats_signal,
+            "stack_weighting": profile.stack_weighting,
+            "freeze_stats": profile.freeze_stats,
+            "credit_condition_active": profile.credit_condition_active,
+            "sparsity_active": profile.sparsity_active,
+            "rebirth_pool_active": profile.rebirth_pool_active,
+        }
+        return builder
 
     def with_initial_wealth(self, w: float):
         self._wealth = float(w); return self

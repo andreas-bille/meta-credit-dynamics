@@ -15,6 +15,7 @@ from .telemetry import TelemetryLogger
 
 @dataclass
 class StackConfig:
+    # G2 inventory: see docs/phase_g_g2_state_inventory.md
     C_agg: float = 0.01
     min_size: int = 2
     max_size: int = 5
@@ -32,6 +33,7 @@ class StackChannel(PhaseCChannel):
     """Aggregated identity (Stack) exported as a Phase-C Channel."""
 
     def __init__(self, members: Dict[str, PhaseCChannel], cfg: Optional[StackConfig] = None, stack_id: str = "stack"):
+        # G2 inventory: see docs/phase_g_g2_state_inventory.md
         if len(members) == 0:
             raise ValueError("Stack needs at least one member")
         self.members: Dict[str, PhaseCChannel] = dict(members)
@@ -128,6 +130,7 @@ class StackChannel(PhaseCChannel):
 
 @dataclass
 class StackFormationThresholds:
+    # G2 inventory: see docs/phase_g_g2_state_inventory.md
     tau_mu: float = 0.0
     tau_vol: float = 1.0e9
     tau_cvar: float = -1.0e9
@@ -160,6 +163,7 @@ class StackManager:
         phase_id: str = "E1",
         run_id: Optional[str] = None,
     ):
+        # G2 inventory: see docs/phase_g_g2_state_inventory.md
         self.stack_cfg = stack_cfg or StackConfig()
         self.thresholds = thresholds or StackFormationThresholds(
             tau_mu=0.0,

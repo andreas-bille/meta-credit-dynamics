@@ -1,7 +1,12 @@
-# Ensure project root is on sys.path so top-level packages are importable
-import os
-import sys
+from __future__ import annotations
 
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if ROOT not in sys.path:
-    sys.path.insert(0, ROOT)
+import pytest
+
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--regenerate",
+        action="store_true",
+        default=False,
+        help="Regenerate reference values for tests that support it.",
+    )

@@ -64,11 +64,11 @@ test-cpu: build-cpu
 	  -v "$(PWD)":/workspace \
 	  -w /workspace \
 	  -u $(UID):$(GID) \
-	  $(IMAGE_CPU) bash -lc "pytest -q"
+	  $(IMAGE_CPU) bash -lc "PYTHONPATH=/workspace pytest -q"
 
 test-gpu: build-gpu
 	docker run --gpus all --rm \
 	  -v "$(PWD)":/workspace \
 	  -w /workspace \
 	  -u $(UID):$(GID) \
-	  $(IMAGE_GPU) bash -lc "pytest -q"
+	  $(IMAGE_GPU) bash -lc "PYTHONPATH=/workspace pytest -q"

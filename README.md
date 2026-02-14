@@ -28,6 +28,10 @@ Phase E (technical completion and feedback coupling) is planned.
 Phase F (Production Readiness, Profile A) is complete as of **v0.5.12**.
 See `docs/phase_f_final_fazit.md` for the final summary and test status.
 
+Phase G (Profile B isolation, toCuda skeleton, empirical studies, G4 parity)
+is complete as of **v0.6.4**. G4 alpha validates Torch parity on CPU tensors;
+GPU‑device execution is the next step.
+
 ### Phase F Scope (v1 / Profile A)
 - Canonical spec: `docs/math-v1.md`
 - Architecture: `docs/architecture.md`

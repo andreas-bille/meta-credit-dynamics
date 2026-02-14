@@ -36,6 +36,7 @@ class CapitalSelector(Channel):
         rebirth_policy: RebirthPolicy | None = None,
         channels: list[Channel] | None = None,
     ):
+        # G2 inventory: see docs/phase_g_g2_state_inventory.md
         self.wealth = wealth
         self.rebirth_threshold = rebirth_threshold
         self.stats = stats

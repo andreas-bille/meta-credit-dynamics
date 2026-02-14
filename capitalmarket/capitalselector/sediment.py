@@ -8,6 +8,7 @@ import json
 
 @dataclass(frozen=True)
 class SedimentNode:
+    # G2 inventory: see docs/phase_g_g2_state_inventory.md
     node_id: int
     members: List[str]
     mask: Dict[str, Any]
@@ -31,6 +32,7 @@ class SedimentDAG:
     """
 
     def __init__(self, persist_path: Optional[Path] = None, *, forbid_pairs: bool = False, truncate: bool = False):
+        # G2 inventory: see docs/phase_g_g2_state_inventory.md
         self.persist_path = persist_path
         self.forbid_pairs = bool(forbid_pairs)
 
