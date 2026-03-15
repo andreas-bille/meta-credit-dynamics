@@ -14,26 +14,23 @@ from .phase_i_state import (
 )
 from .reweight import simplex_normalize
 from .selector_policy import DEFAULT_SELECTOR_POLICY, SelectorPolicy, validate_selector_policy
-
-from abc import ABC, abstractmethod
-from typing import Tuple
+from .ledger import ClaimLedger
 
 
-class Channel(ABC):
+class CapitalSelector:
     """
-    Minimaler ökonomischer Kanal:
-    nimmt Kapitalgewicht und liefert (r, c) zurück.
+    Der kanonische CapitalSelector-Kern.
     """
 
-    @abstractmethod
-    def step(self, weight: float) -> Tuple[float, float]:
-        pass
-
-
-class CapitalSelector(Channel):
-    """
-    Der kanonische, stackbare CapitalSelector.
-    """
+    def __setattr__(self, name, value):
+        object.__setattr__(self, name, value)
+        # Keep accounting liquidity synchronized whenever wealth is directly assigned.
+        if name == "wealth" and "liquidity" in self.__dict__:
+            object.__setattr__(self, "liquidity", float(value))
+        if name == "dead" and "dead_flag" in self.__dict__:
+            object.__setattr__(self, "dead_flag", bool(value))
+        if name == "dead_flag" and "dead" in self.__dict__:
+            object.__setattr__(self, "dead", bool(value))
 
     def __init__(
         self,
@@ -44,7 +41,7 @@ class CapitalSelector(Channel):
         reweight_fn,
         kind: str = "entrepreneur",
         rebirth_policy: RebirthPolicy | None = None,
-        channels: list[Channel] | None = None,
+        K: int = 0,
         selector_policy: SelectorPolicy = DEFAULT_SELECTOR_POLICY,
         lambda_risk: float = DEFAULT_LAMBDA_RISK,
     ):
@@ -60,10 +57,14 @@ class CapitalSelector(Channel):
         # Short alias for debugging/snapshots.
         self.policy = self.selector_policy
 
-        self.channels = channels or []
-        self.K = len(self.channels)
+        self.K = int(K)
+        if self.K < 0:
+            raise ValueError("K must be >= 0")
 
         self.w = np.ones(self.K) / self.K if self.K > 0 else None
+        # Canonical structural mapping F[n,m]. Default: identity transform n->n.
+        self.flow_matrix = np.eye(self.K, dtype=float) if self.K > 0 else np.zeros((0, 0), dtype=float)
+        self.output_weights = None if self.w is None else np.asarray(self.w, dtype=float).copy()
         self.gamma = np.asarray(DEFAULT_TERM_GAMMA, dtype=float).copy()
         self.horizon_count = int(self.gamma.shape[0])
         self.beta_term = float(getattr(self.stats, "beta", 0.01))
@@ -74,6 +75,17 @@ class CapitalSelector(Channel):
 
         self._last_r = 0.0
         self._last_c = 0.0
+
+        # Canonical accounting core state (Phase III / Work Block A).
+        self.process_id = 0
+        self.generation_id = 0
+        self.liquidity = float(self.wealth)
+        self.claim_ledger = ClaimLedger()
+        self.offers = []
+        self.dead = False
+        self.dead_flag = False
+        self.tau_dead = None
+        self._last_settlement_failed = False
 
     def ensure_channel_state(self, K: int) -> None:
         """Keep per-channel state tensors aligned with the active channel count."""
@@ -101,6 +113,8 @@ class CapitalSelector(Channel):
         self.K = K
         if K == 0:
             self.w = None
+            self.flow_matrix = np.zeros((0, 0), dtype=float)
+            self.output_weights = None
             self.mu_term = allocate_term_mu(0, self.horizon_count)
             self.rho = np.zeros(0, dtype=float)
             self.psi = np.zeros(0, dtype=float)
@@ -108,6 +122,21 @@ class CapitalSelector(Channel):
 
         if self.w is None or len(self.w) != K:
             self.w = np.ones(K, dtype=float) / float(K)
+
+        if not hasattr(self, "flow_matrix"):
+            self.flow_matrix = np.eye(K, dtype=float)
+        else:
+            fm = np.asarray(self.flow_matrix, dtype=float)
+            if fm.ndim != 2 or fm.shape[0] != K:
+                self.flow_matrix = np.eye(K, dtype=float)
+
+        if getattr(self, "output_weights", None) is None:
+            self.output_weights = np.asarray(self.w, dtype=float).copy()
+        else:
+            out_w = np.asarray(self.output_weights, dtype=float)
+            fm = np.asarray(self.flow_matrix, dtype=float)
+            if out_w.ndim != 1 or out_w.shape[0] != int(fm.shape[1]):
+                self.output_weights = np.asarray(self.w, dtype=float).copy()
 
         if len(self.rho) != K:
             self.rho = np.zeros(K, dtype=float)
@@ -192,30 +221,6 @@ class CapitalSelector(Channel):
     def allocate(self) -> np.ndarray:
         return None if self.w is None else self.w.copy()
 
-    # ---------- Channel Interface ----------
-
-    def step(self, weight: float) -> tuple[float, float]:
-        """
-        Exportiert diesen Selector als Kanal.
-        """
-        return weight * self._last_r, weight * self._last_c
-
-    # ---------- Stack Step ----------
-
-    def stack_step(self):
-        if not self.channels:
-            return
-
-        rs, cs = [], []
-        w = self.allocate()
-
-        for wi, ch in zip(w, self.channels):
-            r_i, c_i = ch.step(wi)
-            rs.append(r_i)
-            cs.append(c_i)
-
-        self.feedback(sum(rs), sum(cs))
-
     # ---------- Feedback ----------
 
 
@@ -228,6 +233,7 @@ class CapitalSelector(Channel):
         self._last_r = r
         self._last_c = c
         self.wealth += r - c
+        self.liquidity = float(self.wealth)
         self.stats.update(r - c)
         if self.wealth < self.rebirth_threshold:
             self.rebirth()
@@ -246,6 +252,7 @@ class CapitalSelector(Channel):
         self._last_r = r_total
         self._last_c = c
         self.wealth += r_total - c
+        self.liquidity = float(self.wealth)
 
         if trace is not None:
             trace.append("compute_pi")
@@ -297,6 +304,7 @@ class CapitalSelector(Channel):
             self.rebirth_policy.on_rebirth(self)
 
         self.wealth = max(self.wealth, self.rebirth_threshold)
+        self.liquidity = float(self.wealth)
         if self.w is not None:
             self.w = np.ones(self.K) / self.K
         self.mu_term = allocate_term_mu(self.K, self.horizon_count)

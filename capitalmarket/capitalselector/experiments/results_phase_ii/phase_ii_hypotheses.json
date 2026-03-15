@@ -1,0 +1,15 @@
+[
+  {
+    "hypothesis": "H2",
+    "description": "Selector-5 credit stability",
+    "world": "baseline_world",
+    "metric": "rollover_failure_frequency",
+    "delta_definition": "rollover_failure_frequency(Selector-5) - rollover_failure_frequency(Selector-4)",
+    "paired_seed_count": 20,
+    "ci_low": -0.16470994751491358,
+    "ci_high": -0.01225358060162811,
+    "delta_mean": -0.08114720907590178,
+    "decision_rule": "CI_upper(Delta) < 0",
+    "supported": true
+  }
+]

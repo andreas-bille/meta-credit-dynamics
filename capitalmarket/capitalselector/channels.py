@@ -4,11 +4,10 @@ from __future__ import annotations
 from typing import Tuple
 import numpy as np
 
-from .core import Channel
 from .broker import PhaseCChannel
 
 
-class DummyChannel(Channel):
+class DummyChannel:
     """
     Semantikfreier Kanal ohne eigene Dynamik.
     Gibt immer (r=0.0, c=0.0) zurück – nützlich, um nur die

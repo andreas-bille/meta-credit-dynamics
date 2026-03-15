@@ -18,13 +18,20 @@ class Claim:
     parent_claim_id: str | None
     process_id: int | str
     generation_id: int
+    created_tau: int
     creditor_id: str
     debtor_id: str
     nominal: float
     maturity_tau: int
+    src_channel: int = -1
+    dst_channel: int = -1
     claim_type: str = "generic"
     source_offer_id: str | None = None
     drawn_principal: float = 0.0
+
+    @property
+    def amount_due(self) -> float:
+        return float(self.nominal)
 
 
 class IdAllocator:

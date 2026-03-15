@@ -26,6 +26,7 @@ notebooks/team_demo.ipynb
 # Public release process scripts
 scripts/publish_release.sh
 scripts/publish_whitelist.txt
+scripts/generate_v095_evidence.py
 
 # Public representative tests (CPU-friendly, externally understandable)
 tests/conftest.py
@@ -51,6 +52,13 @@ tests/test_phase_ii_cpu_cuda_parity.py
 tests/test_phase_ii_evaluation_protocol.py
 tests/test_issue10_phase_ii_additional_gaps.py
 
+# v0.9.5 release-readiness tests and fixtures
+tests/test_v095_evidence_and_regression.py
+tests/test_v095_module_boundaries.py
+tests/test_v095_v1_readiness.py
+tests/_v095_perf_baseline.json
+tests/baselines/v094_public_api_all.json
+
 # Curated public documentation (project nachvollziehbar, ohne internal-Baum)
 # v1 baseline docs
 docs/v1/README.md
@@ -71,6 +79,10 @@ docs/v3/architecture_phase_ii.md
 docs/v3/impl_spec_phase_ii.md
 docs/v3/math_selector_v3.md
 docs/v3/phase_ii_prompt_seq.md
+
+# v4 release-readiness artifacts
+docs/v4/v1-readiness-checklist.md
+docs/v4/evidence-0.9.5-1.md
 
 # Deliberately excluded (example):
 # - docs/v1/internal/**

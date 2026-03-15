@@ -1,0 +1,58 @@
+{
+  "config": {
+    "seed_count": 20,
+    "steps": 120,
+    "channels": 5,
+    "selectors": [
+      "Selector-4",
+      "Selector-5"
+    ],
+    "worlds": [
+      "baseline_world"
+    ],
+    "h_near_idx": 0,
+    "coupling_alpha": 0.3,
+    "coupling_beta": 0.3,
+    "coupling_gamma": 0.0,
+    "coupling_eta": 0.2,
+    "bootstrap_samples": 2500,
+    "bootstrap_seed": 2026,
+    "backend": "cpu",
+    "confidence_interval": 0.95,
+    "bootstrap_mode": "paired",
+    "enforce_min_runs": false
+  },
+  "aggregate_by_world_selector": {
+    "baseline_world": {
+      "Selector-4": {
+        "run_count": 20,
+        "terminal_wealth_mean": 1.0654365801935932,
+        "time_to_death_mean": 21.4,
+        "rollover_failure_frequency_mean": 0.29341114883984154,
+        "dead_rate": 0.9
+      },
+      "Selector-5": {
+        "run_count": 20,
+        "terminal_wealth_mean": 1.1473536075271629,
+        "time_to_death_mean": 34.55,
+        "rollover_failure_frequency_mean": 0.21226393976393979,
+        "dead_rate": 0.8
+      }
+    }
+  },
+  "hypothesis_results": [
+    {
+      "hypothesis": "H2",
+      "description": "Selector-5 credit stability",
+      "world": "baseline_world",
+      "metric": "rollover_failure_frequency",
+      "delta_definition": "rollover_failure_frequency(Selector-5) - rollover_failure_frequency(Selector-4)",
+      "paired_seed_count": 20,
+      "ci_low": -0.16470994751491358,
+      "ci_high": -0.01225358060162811,
+      "delta_mean": -0.08114720907590178,
+      "decision_rule": "CI_upper(Delta) < 0",
+      "supported": true
+    }
+  ]
+}

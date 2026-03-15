@@ -1,0 +1,62 @@
+{
+  "baseline_seconds": 0.25131224701181054,
+  "last_measurement": {
+    "elapsed_seconds": 0.25131224701181054,
+    "mean_fitness": 22.462500000000016,
+    "mean_time_to_death": 16.0,
+    "pair_count": 1024,
+    "pairwise_distance_mode": "fallback_sampled",
+    "pairwise_distance_sampled_pair_count": 1024,
+    "population_size": 256,
+    "runtime_horizon": 16
+  },
+  "measurement_method": "median_of_3",
+  "measurement_runs": [
+    {
+      "elapsed_seconds": 0.25470509473234415,
+      "mean_fitness": 22.462500000000016,
+      "mean_time_to_death": 16.0,
+      "pair_count": 1024,
+      "pairwise_distance_mode": "fallback_sampled",
+      "pairwise_distance_sampled_pair_count": 1024,
+      "population_size": 256,
+      "runtime_horizon": 16
+    },
+    {
+      "elapsed_seconds": 0.25131224701181054,
+      "mean_fitness": 22.462500000000016,
+      "mean_time_to_death": 16.0,
+      "pair_count": 1024,
+      "pairwise_distance_mode": "fallback_sampled",
+      "pairwise_distance_sampled_pair_count": 1024,
+      "population_size": 256,
+      "runtime_horizon": 16
+    },
+    {
+      "elapsed_seconds": 0.2500526080839336,
+      "mean_fitness": 22.462500000000016,
+      "mean_time_to_death": 16.0,
+      "pair_count": 1024,
+      "pairwise_distance_mode": "fallback_sampled",
+      "pairwise_distance_sampled_pair_count": 1024,
+      "population_size": 256,
+      "runtime_horizon": 16
+    }
+  ],
+  "measurement_statistics": {
+    "max_elapsed_seconds": 0.25470509473234415,
+    "median_elapsed_seconds": 0.25131224701181054,
+    "min_elapsed_seconds": 0.2500526080839336,
+    "sample_count": 3
+  },
+  "regression_multiplier": 1.6,
+  "scenario": {
+    "channel_count": 3,
+    "pairwise_distance_mode": "fallback_sampled",
+    "pairwise_distance_sampled_pair_count": 1024,
+    "population_size": 256,
+    "runtime_horizon": 16,
+    "seed": 9501
+  },
+  "version": 1
+}

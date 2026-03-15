@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import inspect
 from typing import Any, Dict
 import os
 import numpy as np
@@ -14,6 +15,7 @@ from .cuda_impl import CudaCore
 from .determinism import enable_determinism
 from .phase_i_state import DEFAULT_LAMBDA_RISK
 from .population_manager import PopulationManager, RebirthConfig
+from .selector_policy import build_world_action
 from .selector_policy import DEFAULT_SELECTOR_POLICY, SelectorPolicy
 
 
@@ -74,6 +76,96 @@ def _validate_builder_runtime(cfg: RuntimeConfig, *, effective_backend: str, eff
 
     if effective_backend == "cuda" and torch.cuda.is_available() is False:
         raise RuntimeError("backend/device mismatch: cuda backend without available cuda device")
+
+
+def _infer_world_channel_count(world: Any) -> int | None:
+    for attr in ("K", "K_channels", "n_channels", "num_channels"):
+        value = getattr(world, attr, None)
+        if value is None:
+            continue
+        try:
+            count = int(value)
+        except (TypeError, ValueError):
+            continue
+        if count > 0:
+            return count
+
+    channels = getattr(world, "channels", None)
+    if isinstance(channels, (list, tuple)) and len(channels) > 0:
+        return int(len(channels))
+
+    scripted_returns = getattr(world, "_r", None)
+    if scripted_returns is not None:
+        arr = np.asarray(scripted_returns, dtype=float)
+        if arr.ndim == 1 and arr.shape[0] > 0:
+            return int(arr.shape[0])
+
+    return None
+
+
+def _ensure_selector_channels(selector: Any, channels: int) -> None:
+    if channels <= 0:
+        return
+    if hasattr(selector, "ensure_channel_state"):
+        selector.ensure_channel_state(int(channels))
+        return
+    if selector.w is None or len(selector.w) != int(channels):
+        selector.w = np.ones(int(channels), dtype=float) / float(max(1, int(channels)))
+        selector.K = int(channels)
+
+
+def _build_runtime_action(selector: Any):
+    flow_matrix = getattr(selector, "flow_matrix", None)
+    output_weights = getattr(selector, "output_weights", None)
+    if flow_matrix is not None:
+        fm = np.asarray(flow_matrix, dtype=float)
+        if fm.ndim == 2 and fm.shape[0] > 0 and fm.shape[1] > 0:
+            out_w = None if output_weights is None else np.asarray(output_weights, dtype=float)
+            if out_w is None:
+                base_w = selector.allocate() if hasattr(selector, "allocate") else getattr(selector, "w", None)
+                if base_w is not None:
+                    bw = np.asarray(base_w, dtype=float)
+                    if bw.ndim == 1 and bw.shape[0] == int(fm.shape[1]):
+                        out_w = bw
+            return build_world_action(
+                flow_matrix=fm,
+                output_weights=out_w,
+                expected_channels=int(fm.shape[0]),
+            )
+
+    weights = selector.allocate() if hasattr(selector, "allocate") else getattr(selector, "w", None)
+    if weights is None:
+        return None
+    w = np.asarray(weights, dtype=float)
+    if w.ndim != 1 or w.shape[0] == 0:
+        return None
+    return build_world_action(weights=w, expected_channels=int(w.shape[0]))
+
+
+def _world_accepts_action(world: Any) -> bool:
+    step_fn = getattr(world, "step", None)
+    if not callable(step_fn):
+        raise ValueError("world must provide a callable step(...) method")
+
+    try:
+        sig = inspect.signature(step_fn)
+    except (TypeError, ValueError):
+        return False
+
+    positional = [
+        p
+        for p in sig.parameters.values()
+        if p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+    ]
+    if len(positional) < 2:
+        return False
+    return positional[1].name == "action"
+
+
+def _invoke_world_step(world: Any, *, t: int, action: Any):
+    if _world_accepts_action(world):
+        return world.step(int(t), action)
+    return world.step(int(t))
 
 
 def run_population(
@@ -194,13 +286,14 @@ def run(
     trace = []
     history = []
     for t in range(int(steps)):
-        out = world.step(t)
+        hinted_channels = _infer_world_channel_count(world)
+        if hinted_channels is not None:
+            _ensure_selector_channels(selector, int(hinted_channels))
+
+        action = _build_runtime_action(selector)
+        out = _invoke_world_step(world, t=t, action=action)
         r_vec, c_total = validate_world_output(out)
-        if hasattr(selector, "ensure_channel_state"):
-            selector.ensure_channel_state(len(r_vec))
-        elif selector.w is None or len(selector.w) != len(r_vec):
-            selector.w = np.ones(len(r_vec)) / max(1, len(r_vec))
-            selector.K = len(r_vec)
+        _ensure_selector_channels(selector, int(len(r_vec)))
         core.step(selector, r_vec, c_total, freeze=cfg.freeze)
         history.append(selector.state())
         trace.append("step")

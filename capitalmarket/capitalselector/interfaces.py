@@ -10,6 +10,8 @@ class WorldAction:
     """Policy action handed to the world in Phase II."""
 
     weights: np.ndarray
+    flow_matrix: np.ndarray | None = None
+    output_weights: np.ndarray | None = None
     gross_exposure: float = 1.0
     leverage_limit: float = 1.0
     allow_short: bool = False
@@ -35,6 +37,38 @@ def validate_and_normalize_world_action(
     weights = np.asarray(action.weights, dtype=float)
     if weights.ndim != 1:
         raise ValueError("invalid WorldAction: weights must be a 1D array")
+
+    flow_matrix = None if action.flow_matrix is None else np.asarray(action.flow_matrix, dtype=float)
+    output_weights = None if action.output_weights is None else np.asarray(action.output_weights, dtype=float)
+
+    if flow_matrix is not None:
+        if flow_matrix.ndim != 2:
+            raise ValueError("invalid WorldAction: flow_matrix must be a 2D array")
+        if expected_channels is not None and flow_matrix.shape[0] != int(expected_channels):
+            raise ValueError(
+                "invalid WorldAction: flow_matrix row count must match expected channels"
+            )
+        if np.any(flow_matrix < 0.0):
+            raise ValueError("invalid WorldAction: flow_matrix must be non-negative")
+        if not np.all(np.isfinite(flow_matrix)):
+            raise ValueError("invalid WorldAction: flow_matrix must contain only finite values")
+
+        if output_weights is None:
+            output_weights = np.ones(flow_matrix.shape[1], dtype=float)
+        if output_weights.ndim != 1:
+            raise ValueError("invalid WorldAction: output_weights must be a 1D array")
+        if output_weights.shape[0] != flow_matrix.shape[1]:
+            raise ValueError(
+                "invalid WorldAction: output_weights length must match flow_matrix output dimension"
+            )
+        if np.any(output_weights < 0.0):
+            raise ValueError("invalid WorldAction: output_weights must be non-negative")
+        if not np.all(np.isfinite(output_weights)):
+            raise ValueError("invalid WorldAction: output_weights must contain only finite values")
+
+        # Canonical projection: input-channel exposure induced by F[n,m] and output allocation m.
+        weights = np.asarray(flow_matrix @ output_weights, dtype=float)
+
     if expected_channels is not None and weights.shape[0] != int(expected_channels):
         raise ValueError(
             f"invalid WorldAction: expected {int(expected_channels)} weights, got {weights.shape[0]}"
@@ -73,8 +107,12 @@ def validate_and_normalize_world_action(
     else:
         normalized = weights * (gross_exposure / norm)
 
+    normalized_output_weights = None if output_weights is None else np.asarray(output_weights, dtype=float)
+
     return WorldAction(
         weights=np.asarray(normalized, dtype=float),
+        flow_matrix=None if flow_matrix is None else np.asarray(flow_matrix, dtype=float),
+        output_weights=normalized_output_weights,
         gross_exposure=gross_exposure,
         leverage_limit=leverage_limit,
         allow_short=allow_short,

@@ -70,6 +70,94 @@ def _compact_claim_slots(state: DeviceState) -> tuple[torch.Tensor, dict[str, to
     return claim_count, fields
 
 
+def _settle_due_claims_partitioned(
+    *,
+    state: DeviceState,
+    due_mask: torch.Tensor,
+    due_amount: torch.Tensor,
+    wealth_after_legacy: torch.Tensor,
+    lambda_cash_share: float,
+    accept_by_default: bool,
+    claim_slot_dst_channel: torch.Tensor,
+) -> dict[str, torch.Tensor]:
+    n, _c = due_mask.shape
+    device = due_mask.device
+    dtype = due_amount.dtype
+
+    wealth_after_claim = wealth_after_legacy.clone()
+    slot_cash_paid = torch.zeros_like(due_amount)
+    slot_remainder = torch.zeros_like(due_amount)
+    slot_unresolved_mask = torch.zeros_like(due_mask)
+    close_due_claim = torch.zeros_like(due_mask)
+    rewrite_due_claim = torch.zeros_like(due_mask)
+
+    batch_idx = 0
+    while batch_idx < n:
+        due_slots = torch.nonzero(due_mask[batch_idx], as_tuple=False).flatten().tolist()
+        if not due_slots:
+            batch_idx += 1
+            continue
+
+        order_rows: list[tuple[int, int, int]] = []
+        for slot in due_slots:
+            dst_channel = int(claim_slot_dst_channel[batch_idx, slot].item())
+            group_key = -1 if dst_channel < 0 else dst_channel
+            claim_target = int(state.claim_target[batch_idx, slot].item())
+            order_rows.append((group_key, claim_target, int(slot)))
+        order_rows.sort(key=lambda row: (row[0], row[1]))
+
+        wealth_running = float(wealth_after_claim[batch_idx].item())
+        for _group_key, _target, slot in order_rows:
+            amount_due = float(due_amount[batch_idx, slot].item())
+            if amount_due <= 0.0:
+                continue
+
+            if accept_by_default:
+                available_cash = max(0.0, wealth_running)
+                cash_part = min(available_cash, float(lambda_cash_share) * amount_due)
+                remainder = max(0.0, amount_due - cash_part)
+
+                slot_cash_paid[batch_idx, slot] = torch.as_tensor(cash_part, device=device, dtype=dtype)
+                slot_remainder[batch_idx, slot] = torch.as_tensor(remainder, device=device, dtype=dtype)
+                wealth_running -= float(cash_part)
+
+                if remainder <= 1e-12:
+                    close_due_claim[batch_idx, slot] = True
+                else:
+                    rewrite_due_claim[batch_idx, slot] = True
+                continue
+
+            # Rejected path: pay full if possible, else unresolved remains open.
+            if wealth_running >= amount_due:
+                slot_cash_paid[batch_idx, slot] = torch.as_tensor(amount_due, device=device, dtype=dtype)
+                slot_remainder[batch_idx, slot] = torch.as_tensor(0.0, device=device, dtype=dtype)
+                wealth_running -= float(amount_due)
+                close_due_claim[batch_idx, slot] = True
+            else:
+                slot_cash_paid[batch_idx, slot] = torch.as_tensor(0.0, device=device, dtype=dtype)
+                slot_remainder[batch_idx, slot] = torch.as_tensor(amount_due, device=device, dtype=dtype)
+                slot_unresolved_mask[batch_idx, slot] = True
+
+        wealth_after_claim[batch_idx] = torch.as_tensor(wealth_running, device=device, dtype=dtype)
+        batch_idx += 1
+
+    unresolved_claim = torch.where(slot_unresolved_mask, due_amount, torch.zeros_like(due_amount)).sum(dim=1)
+    claim_cash_paid = slot_cash_paid.sum(dim=1)
+    claim_remainder = slot_remainder.sum(dim=1)
+
+    return {
+        "wealth_after_claim": wealth_after_claim,
+        "slot_cash_paid": slot_cash_paid,
+        "slot_remainder": slot_remainder,
+        "slot_unresolved_mask": slot_unresolved_mask,
+        "close_due_claim": close_due_claim,
+        "rewrite_due_claim": rewrite_due_claim,
+        "unresolved_claim": unresolved_claim,
+        "claim_cash_paid": claim_cash_paid,
+        "claim_remainder": claim_remainder,
+    }
+
+
 def step_at_tau_cuda(
     state: DeviceState,
     input_events: Mapping[str, Any],
@@ -132,6 +220,15 @@ def step_at_tau_cuda(
     else:
         maturity_offset_i32 = torch.scalar_tensor(int(maturity_offset_in), device=device, dtype=torch.int32)
 
+    enable_dst_partition = bool(input_events.get("enable_dst_partition", False))
+    claim_slot_dst_channel_in = input_events.get("claim_slot_dst_channel")
+    if isinstance(claim_slot_dst_channel_in, torch.Tensor):
+        claim_slot_dst_channel = claim_slot_dst_channel_in.to(device=device, dtype=torch.int32)
+    else:
+        claim_slot_dst_channel = torch.full_like(state.claim_target, -1)
+    if claim_slot_dst_channel.shape != state.claim_target.shape:
+        raise ValueError("cuda claim state drift detected")
+
     cuda_ops_count = 0
 
     if freeze:
@@ -142,6 +239,11 @@ def step_at_tau_cuda(
             "offer_publication_mask": torch.zeros((n,), device=device, dtype=torch.bool),
             "claim_cash_paid": torch.zeros((n,), device=device, dtype=dtype),
             "claim_remainder": torch.zeros((n,), device=device, dtype=dtype),
+            "claim_unresolved": torch.zeros((n,), device=device, dtype=dtype),
+            "claim_slot_cash_paid": torch.zeros_like(state.claim_amount),
+            "claim_slot_remainder": torch.zeros_like(state.claim_amount),
+            "claim_slot_mask": torch.zeros_like(state.claim_active_mask),
+            "claim_slot_unresolved_mask": torch.zeros_like(state.claim_active_mask),
             "legacy_cash_paid": torch.zeros((n,), device=device, dtype=dtype),
             "legacy_unresolved": torch.zeros((n,), device=device, dtype=dtype),
             "cuda_ops_count": cuda_ops_count,
@@ -149,7 +251,7 @@ def step_at_tau_cuda(
         }
 
     maturity = state.claim_maturity_tau
-    due_mask = state.claim_active_mask & (maturity == int(tau))
+    due_mask = state.claim_active_mask & (maturity <= int(tau))
     due_amount = torch.where(due_mask, state.claim_amount, torch.zeros_like(state.claim_amount))
     due_claim_amount = torch.where(due_mask, due_amount, torch.zeros_like(due_amount))
     claim_due_total = due_claim_amount.sum(dim=1)
@@ -161,7 +263,13 @@ def step_at_tau_cuda(
     wealth_after_returns = state.wealth + returns_total
     cuda_ops_count += 1
 
-    available_cash = torch.clamp(wealth_after_returns, min=0.0)
+    has_legacy_due = c_total > 0
+    can_pay_legacy_full = wealth_after_returns >= c_total
+    legacy_cash_paid = torch.where(has_legacy_due & can_pay_legacy_full, c_total, torch.zeros_like(c_total))
+    legacy_unresolved = torch.where(has_legacy_due & (~can_pay_legacy_full), c_total, torch.zeros_like(c_total))
+    wealth_after_legacy = wealth_after_returns - legacy_cash_paid
+
+    available_cash = torch.clamp(wealth_after_legacy, min=0.0)
     claim_cash_candidate = torch.minimum(available_cash, lambda_cash_share_t * claim_due_total)
     claim_remainder = torch.clamp(claim_due_total - claim_cash_candidate, min=0.0)
 
@@ -173,24 +281,47 @@ def step_at_tau_cuda(
     accepted_claim = has_due_claim & accept_by_default_t
     rejected_claim = has_due_claim & (~accepted_claim)
 
-    can_pay_rejected_claim_full = wealth_after_returns >= claim_due_total
+    can_pay_rejected_claim_full = wealth_after_legacy >= claim_due_total
     rejected_claim_paid_full = rejected_claim & can_pay_rejected_claim_full
     rejected_claim_failed = rejected_claim & (~can_pay_rejected_claim_full)
 
     wealth_after_claim = torch.where(
         accepted_claim,
-        wealth_after_returns - claim_cash_candidate,
-        torch.where(rejected_claim_paid_full, wealth_after_returns - claim_due_total, wealth_after_returns),
+        wealth_after_legacy - claim_cash_candidate,
+        torch.where(rejected_claim_paid_full, wealth_after_legacy - claim_due_total, wealth_after_legacy),
     )
 
     unresolved_claim = torch.where(rejected_claim_failed, claim_due_total, torch.zeros_like(claim_due_total))
     cuda_ops_count += 1
 
-    eps_t = torch.scalar_tensor(1e-12, device=device, dtype=dtype)
-    close_due_claim = (accepted_claim.unsqueeze(1) & due_mask & (slot_remainder <= eps_t)) | (
-        rejected_claim_paid_full.unsqueeze(1) & due_mask
-    )
-    rewrite_due_claim = accepted_claim.unsqueeze(1) & due_mask & (slot_remainder > eps_t)
+    slot_unresolved_mask = rejected_claim_failed.unsqueeze(1) & due_mask
+    if enable_dst_partition:
+        partition_out = _settle_due_claims_partitioned(
+            state=state,
+            due_mask=due_mask,
+            due_amount=due_amount,
+            wealth_after_legacy=wealth_after_legacy,
+            lambda_cash_share=float(lambda_cash_share_t.item()),
+            accept_by_default=bool(accept_by_default_t.item()),
+            claim_slot_dst_channel=claim_slot_dst_channel,
+        )
+        wealth_after_claim = partition_out["wealth_after_claim"]
+        slot_cash_paid = partition_out["slot_cash_paid"]
+        slot_remainder = partition_out["slot_remainder"]
+        slot_unresolved_mask = partition_out["slot_unresolved_mask"]
+        close_due_claim = partition_out["close_due_claim"]
+        rewrite_due_claim = partition_out["rewrite_due_claim"]
+        unresolved_claim = partition_out["unresolved_claim"]
+        claim_cash_candidate = partition_out["claim_cash_paid"]
+        claim_remainder = partition_out["claim_remainder"]
+        rejected_claim_failed = unresolved_claim > 0.0
+
+    if not enable_dst_partition:
+        eps_t = torch.scalar_tensor(1e-12, device=device, dtype=dtype)
+        close_due_claim = (accepted_claim.unsqueeze(1) & due_mask & (slot_remainder <= eps_t)) | (
+            rejected_claim_paid_full.unsqueeze(1) & due_mask
+        )
+        rewrite_due_claim = accepted_claim.unsqueeze(1) & due_mask & (slot_remainder > eps_t)
 
     claim_amount_after = state.claim_amount.clone()
     claim_active_after = state.claim_active_mask.clone()
@@ -218,12 +349,7 @@ def step_at_tau_cuda(
     claim_count_compact, compact_fields = _compact_claim_slots(state_tmp)
     cuda_ops_count += 1
 
-    has_legacy_due = c_total > 0
-    can_pay_legacy_full = wealth_after_claim >= c_total
-    legacy_cash_paid = torch.where(has_legacy_due & can_pay_legacy_full, c_total, torch.zeros_like(c_total))
-    legacy_unresolved = torch.where(has_legacy_due & (~can_pay_legacy_full), c_total, torch.zeros_like(c_total))
-
-    wealth_after_settlement = wealth_after_claim - legacy_cash_paid
+    wealth_after_settlement = wealth_after_claim
     settlement_failed = (rejected_claim_failed) | (legacy_unresolved > 0)
     cuda_ops_count += 1
 
@@ -309,6 +435,11 @@ def step_at_tau_cuda(
         "offer_publication_mask": alive_mask,
         "claim_cash_paid": claim_cash_candidate,
         "claim_remainder": claim_remainder,
+        "claim_unresolved": unresolved_claim,
+        "claim_slot_cash_paid": slot_cash_paid,
+        "claim_slot_remainder": slot_remainder,
+        "claim_slot_mask": due_mask,
+        "claim_slot_unresolved_mask": slot_unresolved_mask,
         "legacy_cash_paid": legacy_cash_paid,
         "legacy_unresolved": legacy_unresolved,
         "cuda_ops_count": cuda_ops_count,
