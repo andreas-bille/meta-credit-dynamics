@@ -37,30 +37,22 @@ Notes:
 
 ## Status
 
-Phase D (Repair & Stabilization) is complete.
+Current public snapshot references release **v1.0.0**.
 
-Phase F / G (production-readiness path in v1) are complete.
+v0.9.x stabilization and readiness work is integrated in this branch, including:
 
-Phase H (GPU runtime contract and backend proof path in v2) is complete.
-
-Phase II (closed-loop world-action coupling and paired-bootstrap evaluation) is complete
-in the current development stream (Issue #9/#10 follow-up).
-
-Recent Phase-II updates include:
-- economic-state ownership for `expected_inflows` (selector-side value is derived, not duplicated)
-- strengthened Selector-5 strategic credit profile in evaluation runs for clearer H2 separation
-
-Current public snapshot references release **v0.8.31**.
-
-Phase-II implementation references:
-- `docs/v3/impl_spec_phase_ii.md`
-- `docs/v3/architecture_phase_ii.md`
-- `docs/v3/phase_ii_prompt_seq.md`
+- long-run harness and checkpoint/replay path
+- experiment dataset + visualization comparison utilities
+- architecture/module-boundary hardening
+- readiness checklist and evidence automation updates
 
 Reference docs:
+
 - v1 baseline: `docs/v1/math-v1.md`, `docs/v1/architecture.md`, `docs/v1/interface.md`
 - v2 baseline: `docs/v2/math-v2.md`, `docs/v2/architecture.md`, `docs/v2/README.md`
-- release notes: `docs/v2/release_notes_v0.7.20.md` (latest public notes file in this snapshot)
+- v3 implementation details: `docs/v3/impl_spec_phase_ii.md`, `docs/v3/architecture_phase_ii.md`, `docs/v3/phase_ii_prompt_seq.md`
+- v4 stabilization and readiness artifacts: `docs/v4/issues-0.9.5.md`, `docs/v4/v1-readiness-checklist.md`
+- v5 post-v1 planning and review artifacts: `docs/v5/post_v1_structural_mutation_roadmap.md`, `docs/v5/v1_0_0_rc_diff_audit_and_architecture_stress_review.md`
 
 ### Tests
 Run tests with Makefile/docker workflow:
